@@ -19,11 +19,12 @@ elif DB_URL.startswith("postgresql://") and "+psycopg" not in DB_URL:
     DB_URL = DB_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 engine = create_engine(DB_URL, pool_pre_ping=True, connect_args={"check_same_thread": False} if DB_URL.startswith("sqlite") else {})
 Session = sessionmaker(engine, expire_on_commit=False)
+DB_SCHEMA = os.getenv("DB_SCHEMA", "invoice_agent") if not DB_URL.startswith("sqlite") else None
 
 class Base(DeclarativeBase): pass
 class TaskRow(Base):
     __tablename__ = "a2a_tasks"
-    __table_args__ = {"schema": os.getenv("DB_SCHEMA", "invoice_agent")}
+    __table_args__ = {"schema": DB_SCHEMA}
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     principal: Mapped[str] = mapped_column(String(256), index=True)
     context_id: Mapped[str] = mapped_column(String(80), index=True)
@@ -35,7 +36,7 @@ class TaskRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 class MessageRow(Base):
     __tablename__ = "a2a_messages"
-    __table_args__ = (UniqueConstraint("principal", "message_id", name="uq_principal_message"), {"schema": os.getenv("DB_SCHEMA", "invoice_agent")})
+    __table_args__ = (UniqueConstraint("principal", "message_id", name="uq_principal_message"), {"schema": DB_SCHEMA})
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     principal: Mapped[str] = mapped_column(String(256))
     message_id: Mapped[str] = mapped_column(String(256))
@@ -51,7 +52,7 @@ if DB_URL.startswith("sqlite"):
     Base.metadata.create_all(engine)
 else:
     from sqlalchemy import text as sql_text
-    schema = os.getenv("DB_SCHEMA", "invoice_agent")
+    schema = DB_SCHEMA or "invoice_agent"
     with engine.begin() as conn:
         conn.execute(sql_text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
     Base.metadata.create_all(engine)
